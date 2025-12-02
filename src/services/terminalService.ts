@@ -32,6 +32,22 @@ export class TerminalService {
         }
     }
 
+    public async hasContent(terminal: vscode.Terminal): Promise<boolean> {
+        try {
+            const output = await this.readTerminalOutput(terminal);
+            return output.trim().length > 0;
+        } catch {
+            return false;
+        }
+    }
+
+    public async getLastLines(terminal: vscode.Terminal, lineCount: number = 50): Promise<string> {
+        const fullOutput = await this.readTerminalOutput(terminal);
+        const lines = fullOutput.split('\n');
+        const lastLines = lines.slice(-lineCount);
+        return lastLines.join('\n');
+    }
+
     private sanitizeOutput(output: string): string {
         let cleaned = output.replace(/\x1b\[[0-9;]*[a-zA-Z]/g, '');
         

@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { TerminalService } from '../services/terminalService';
+import { TerminalService } from '../terminalService';
 
 jest.mock('vscode', () => ({
     window: {

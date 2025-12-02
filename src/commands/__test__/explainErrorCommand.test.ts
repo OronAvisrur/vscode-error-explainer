@@ -2,14 +2,6 @@ import * as vscode from 'vscode';
 import { ExplainErrorCommand } from '../explainErrorCommand';
 import { TerminalService } from '../../services/terminalService';
 
-jest.mock('vscode', () => ({
-    window: {
-        showWarningMessage: jest.fn(),
-        showInformationMessage: jest.fn(),
-        showErrorMessage: jest.fn(),
-    },
-}));
-
 jest.mock('../../services/terminalService');
 
 describe('ExplainErrorCommand', () => {

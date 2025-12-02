@@ -1,17 +1,6 @@
 import * as vscode from 'vscode';
 import { StatusBarButton } from '../statusBarButton';
 
-jest.mock('vscode', () => ({
-    window: {
-        createStatusBarItem: jest.fn(),
-        activeTerminal: undefined,
-        onDidChangeActiveTerminal: jest.fn(),
-    },
-    StatusBarAlignment: {
-        Right: 2,
-    },
-}));
-
 describe('StatusBarButton', () => {
     let statusBarButton: StatusBarButton;
     let mockStatusBarItem: any;
@@ -40,6 +29,8 @@ describe('StatusBarButton', () => {
         mockContext = {
             subscriptions: [],
         } as any;
+
+        (vscode.window as any).activeTerminal = undefined;
     });
 
     describe('constructor', () => {

@@ -1,25 +1,13 @@
 import * as vscode from 'vscode';
 import { TerminalService } from '../terminalService';
 
-jest.mock('vscode', () => ({
-    window: {
-        activeTerminal: undefined,
-    },
-    commands: {
-        executeCommand: jest.fn(),
-    },
-    env: {
-        clipboard: {
-            readText: jest.fn(),
-        },
-    },
-}));
-
 describe('TerminalService', () => {
     let terminalService: TerminalService;
     let mockTerminal: Partial<vscode.Terminal>;
 
     beforeEach(() => {
+        jest.clearAllMocks();
+
         terminalService = new TerminalService();
         
         mockTerminal = {
@@ -27,7 +15,7 @@ describe('TerminalService', () => {
             show: jest.fn(),
         };
 
-        jest.clearAllMocks();
+        (vscode.window as any).activeTerminal = undefined;
     });
 
     describe('getActiveTerminal', () => {

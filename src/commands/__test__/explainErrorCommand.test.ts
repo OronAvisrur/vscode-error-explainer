@@ -1,130 +1,171 @@
 import * as vscode from 'vscode';
 import { ExplainErrorCommand } from '../explainErrorCommand';
 import { TerminalService } from '../../services/terminalService';
+import { ErrorParserService } from '../../services/errorParserService';
+import { Logger } from '../../utils/logger';
 
-jest.mock('../../services/terminalService');
+jest.mock('vscode');
 
 describe('ExplainErrorCommand', () => {
-    let explainErrorCommand: ExplainErrorCommand;
-    let mockTerminalService: jest.Mocked<TerminalService>;
-    let mockTerminal: Partial<vscode.Terminal>;
+  let command: ExplainErrorCommand;
+  let mockTerminalService: jest.Mocked<TerminalService>;
+  let mockErrorParserService: jest.Mocked<ErrorParserService>;
+  let mockLogger: jest.Mocked<Logger>;
+  let mockTerminal: vscode.Terminal;
 
-    beforeEach(() => {
-        jest.clearAllMocks();
+  beforeEach(() => {
+    mockTerminal = {} as vscode.Terminal;
 
-        mockTerminal = {
-            name: 'TestTerminal',
-            show: jest.fn(),
-        };
+    mockTerminalService = {
+      getActiveTerminal: jest.fn(),
+      readTerminalOutput: jest.fn(),
+    } as any;
 
-        mockTerminalService = new TerminalService() as jest.Mocked<TerminalService>;
-        explainErrorCommand = new ExplainErrorCommand();
-        (explainErrorCommand as any).terminalService = mockTerminalService;
+    mockErrorParserService = {
+      parseError: jest.fn(),
+    } as any;
+
+    mockLogger = {
+      info: jest.fn(),
+      warn: jest.fn(),
+      error: jest.fn(),
+      debug: jest.fn(),
+    } as any;
+
+    command = new ExplainErrorCommand(
+      mockTerminalService,
+      mockErrorParserService,
+      mockLogger
+    );
+
+    (vscode.window.showWarningMessage as jest.Mock).mockClear();
+    (vscode.window.showInformationMessage as jest.Mock).mockClear();
+    (vscode.window.showErrorMessage as jest.Mock).mockClear();
+  });
+
+  describe('execute', () => {
+    it('should show warning when no active terminal exists', async () => {
+      mockTerminalService.getActiveTerminal.mockReturnValue(undefined);
+
+      await command.execute();
+
+      expect(mockLogger.info).toHaveBeenCalledWith('ExplainErrorCommand executed');
+      expect(mockLogger.warn).toHaveBeenCalledWith('No active terminal available');
+      expect(vscode.window.showWarningMessage).toHaveBeenCalledWith('No active terminal found');
+      expect(mockTerminalService.readTerminalOutput).not.toHaveBeenCalled();
     });
 
-    describe('execute', () => {
-        it('should show warning when no active terminal exists', async () => {
-            mockTerminalService.getActiveTerminal.mockReturnValue(undefined);
+    it('should show error when terminal read fails', async () => {
+      mockTerminalService.getActiveTerminal.mockReturnValue(mockTerminal);
+      mockTerminalService.readTerminalOutput.mockRejectedValue(new Error('Read failed'));
 
-            await explainErrorCommand.execute();
+      await command.execute();
 
-            expect(vscode.window.showWarningMessage).toHaveBeenCalledWith(
-                'No active terminal found. Please open a terminal first.'
-            );
-            expect(mockTerminalService.hasContent).not.toHaveBeenCalled();
-        });
-
-        it('should show warning when terminal is empty', async () => {
-            mockTerminalService.getActiveTerminal.mockReturnValue(mockTerminal as vscode.Terminal);
-            mockTerminalService.hasContent.mockResolvedValue(false);
-
-            await explainErrorCommand.execute();
-
-            expect(mockTerminalService.hasContent).toHaveBeenCalledWith(mockTerminal);
-            expect(vscode.window.showWarningMessage).toHaveBeenCalledWith(
-                'Terminal is empty. Run a command first to generate output.'
-            );
-            expect(mockTerminalService.getLastLines).not.toHaveBeenCalled();
-        });
-
-        it('should read and display terminal output successfully', async () => {
-            const mockOutput = 'Error: File not found\nat line 42\nSome other output';
-            mockTerminalService.getActiveTerminal.mockReturnValue(mockTerminal as vscode.Terminal);
-            mockTerminalService.hasContent.mockResolvedValue(true);
-            mockTerminalService.getLastLines.mockResolvedValue(mockOutput);
-
-            await explainErrorCommand.execute();
-
-            expect(mockTerminalService.getActiveTerminal).toHaveBeenCalled();
-            expect(mockTerminalService.hasContent).toHaveBeenCalledWith(mockTerminal);
-            expect(vscode.window.showInformationMessage).toHaveBeenCalledWith('Reading terminal output...');
-            expect(mockTerminalService.getLastLines).toHaveBeenCalledWith(mockTerminal, 50);
-            expect(vscode.window.showInformationMessage).toHaveBeenCalledWith(
-                expect.stringContaining('Terminal output captured (3 lines)')
-            );
-        });
-
-        it('should truncate preview when output is long', async () => {
-            const longOutput = 'a'.repeat(250);
-            mockTerminalService.getActiveTerminal.mockReturnValue(mockTerminal as vscode.Terminal);
-            mockTerminalService.hasContent.mockResolvedValue(true);
-            mockTerminalService.getLastLines.mockResolvedValue(longOutput);
-
-            await explainErrorCommand.execute();
-
-            expect(vscode.window.showInformationMessage).toHaveBeenCalledWith(
-                expect.stringContaining('...')
-            );
-            expect(vscode.window.showInformationMessage).toHaveBeenCalledWith(
-                expect.stringMatching(/Preview: a{200}\.\.\./)
-            );
-        });
-
-        it('should not truncate preview when output is short', async () => {
-            const shortOutput = 'Error: Short message';
-            mockTerminalService.getActiveTerminal.mockReturnValue(mockTerminal as vscode.Terminal);
-            mockTerminalService.hasContent.mockResolvedValue(true);
-            mockTerminalService.getLastLines.mockResolvedValue(shortOutput);
-
-            await explainErrorCommand.execute();
-
-            expect(vscode.window.showInformationMessage).toHaveBeenCalledWith(
-                `Terminal output captured (1 lines). Preview: ${shortOutput}`
-            );
-        });
-
-        it('should handle errors gracefully', async () => {
-            const errorMessage = 'Failed to read terminal';
-            mockTerminalService.getActiveTerminal.mockReturnValue(mockTerminal as vscode.Terminal);
-            mockTerminalService.hasContent.mockRejectedValue(new Error(errorMessage));
-
-            await explainErrorCommand.execute();
-
-            expect(vscode.window.showErrorMessage).toHaveBeenCalledWith(
-                `Error reading terminal: ${errorMessage}`
-            );
-        });
-
-        it('should handle unknown errors', async () => {
-            mockTerminalService.getActiveTerminal.mockReturnValue(mockTerminal as vscode.Terminal);
-            mockTerminalService.hasContent.mockRejectedValue('string error');
-
-            await explainErrorCommand.execute();
-
-            expect(vscode.window.showErrorMessage).toHaveBeenCalledWith(
-                'Error reading terminal: Unknown error'
-            );
-        });
-
-        it('should request last 50 lines by default', async () => {
-            const mockOutput = 'Some output';
-            mockTerminalService.getActiveTerminal.mockReturnValue(mockTerminal as vscode.Terminal);
-            mockTerminalService.hasContent.mockResolvedValue(true);
-            mockTerminalService.getLastLines.mockResolvedValue(mockOutput);
-
-            await explainErrorCommand.execute();
-
-            expect(mockTerminalService.getLastLines).toHaveBeenCalledWith(mockTerminal, 50);
-        });
+      expect(vscode.window.showErrorMessage).toHaveBeenCalledWith('Failed to read terminal output');
+      expect(mockLogger.error).toHaveBeenCalledWith('Terminal read failed', expect.any(Error));
+      expect(mockErrorParserService.parseError).not.toHaveBeenCalled();
     });
+
+    it('should show warning when terminal is empty', async () => {
+      mockTerminalService.getActiveTerminal.mockReturnValue(mockTerminal);
+      mockTerminalService.readTerminalOutput.mockResolvedValue('   ');
+
+      await command.execute();
+
+      expect(vscode.window.showWarningMessage).toHaveBeenCalledWith('Terminal is empty');
+      expect(mockLogger.warn).toHaveBeenCalledWith('No terminal content available');
+      expect(mockErrorParserService.parseError).not.toHaveBeenCalled();
+    });
+
+    it('should show info message when no error is detected', async () => {
+      const terminalOutput = 'Some regular output without errors';
+      mockTerminalService.getActiveTerminal.mockReturnValue(mockTerminal);
+      mockTerminalService.readTerminalOutput.mockResolvedValue(terminalOutput);
+      mockErrorParserService.parseError.mockReturnValue(null);
+
+      await command.execute();
+
+      expect(mockLogger.info).toHaveBeenCalledWith('Terminal output retrieved, parsing errors...');
+      expect(mockLogger.info).toHaveBeenCalledWith('No error pattern matched');
+      expect(mockErrorParserService.parseError).toHaveBeenCalledWith(terminalOutput);
+      expect(vscode.window.showInformationMessage).toHaveBeenCalledWith(
+        'No error detected in terminal output'
+      );
+    });
+
+    it('should display error summary when error is detected', async () => {
+      const terminalOutput = 'TypeError: Cannot read property';
+      const parsedError = {
+        type: 'TypeError',
+        message: 'Cannot read property',
+        language: 'JavaScript',
+        filePath: '/home/user/app.js',
+        lineNumber: 42,
+        columnNumber: 10,
+        stackTrace: 'stack trace here',
+        rawOutput: terminalOutput,
+      };
+
+      mockTerminalService.getActiveTerminal.mockReturnValue(mockTerminal);
+      mockTerminalService.readTerminalOutput.mockResolvedValue(terminalOutput);
+      mockErrorParserService.parseError.mockReturnValue(parsedError);
+
+      await command.execute();
+
+      expect(mockLogger.info).toHaveBeenCalledWith(
+        'Error detected: TypeError in JavaScript'
+      );
+      expect(vscode.window.showInformationMessage).toHaveBeenCalledWith(
+        'Error: TypeError | Message: Cannot read property | Language: JavaScript | File: /home/user/app.js | Line: 42'
+      );
+    });
+
+    it('should display error summary without file info when unavailable', async () => {
+      const terminalOutput = 'RangeError: Maximum call stack size exceeded';
+      const parsedError = {
+        type: 'RangeError',
+        message: 'Maximum call stack size exceeded',
+        language: 'JavaScript',
+        filePath: null,
+        lineNumber: null,
+        columnNumber: null,
+        stackTrace: 'stack trace here',
+        rawOutput: terminalOutput,
+      };
+
+      mockTerminalService.getActiveTerminal.mockReturnValue(mockTerminal);
+      mockTerminalService.readTerminalOutput.mockResolvedValue(terminalOutput);
+      mockErrorParserService.parseError.mockReturnValue(parsedError);
+
+      await command.execute();
+
+      expect(vscode.window.showInformationMessage).toHaveBeenCalledWith(
+        'Error: RangeError | Message: Maximum call stack size exceeded | Language: JavaScript'
+      );
+    });
+
+    it('should handle Python error with file but no column', async () => {
+      const terminalOutput = 'NameError: name is not defined';
+      const parsedError = {
+        type: 'NameError',
+        message: 'name is not defined',
+        language: 'Python',
+        filePath: 'script.py',
+        lineNumber: 15,
+        columnNumber: null,
+        stackTrace: 'traceback here',
+        rawOutput: terminalOutput,
+      };
+
+      mockTerminalService.getActiveTerminal.mockReturnValue(mockTerminal);
+      mockTerminalService.readTerminalOutput.mockResolvedValue(terminalOutput);
+      mockErrorParserService.parseError.mockReturnValue(parsedError);
+
+      await command.execute();
+
+      expect(vscode.window.showInformationMessage).toHaveBeenCalledWith(
+        'Error: NameError | Message: name is not defined | Language: Python | File: script.py | Line: 15'
+      );
+    });
+  });
 });

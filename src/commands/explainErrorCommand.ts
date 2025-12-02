@@ -1,42 +1,80 @@
 import * as vscode from 'vscode';
 import { TerminalService } from '../services/terminalService';
+import { ErrorParserService } from '../services/errorParserService';
+import { Logger } from '../utils/logger';
 
 export class ExplainErrorCommand {
-    private terminalService: TerminalService;
+  private terminalService: TerminalService;
+  private errorParserService: ErrorParserService;
+  private logger: Logger;
 
-    constructor() {
-        this.terminalService = new TerminalService();
+  constructor(
+    terminalService: TerminalService,
+    errorParserService: ErrorParserService,
+    logger: Logger
+  ) {
+    this.terminalService = terminalService;
+    this.errorParserService = errorParserService;
+    this.logger = logger;
+  }
+
+  public async execute(): Promise<void> {
+    this.logger.info('ExplainErrorCommand executed');
+
+    const activeTerminal = this.terminalService.getActiveTerminal();
+
+    if (!activeTerminal) {
+      vscode.window.showWarningMessage('No active terminal found');
+      this.logger.warn('No active terminal available');
+      return;
     }
 
-    public async execute(): Promise<void> {
-        try {
-            const terminal = this.terminalService.getActiveTerminal();
-            
-            if (!terminal) {
-                vscode.window.showWarningMessage('No active terminal found. Please open a terminal first.');
-                return;
-            }
-
-            const hasContent = await this.terminalService.hasContent(terminal);
-            if (!hasContent) {
-                vscode.window.showWarningMessage('Terminal is empty. Run a command first to generate output.');
-                return;
-            }
-
-            vscode.window.showInformationMessage('Reading terminal output...');
-            const output = await this.terminalService.getLastLines(terminal, 50);
-
-            const preview = output.length > 200 
-                ? output.substring(0, 200) + '...' 
-                : output;
-            
-            vscode.window.showInformationMessage(
-                `Terminal output captured (${output.split('\n').length} lines). Preview: ${preview}`
-            );
-
-        } catch (error) {
-            const message = error instanceof Error ? error.message : 'Unknown error';
-            vscode.window.showErrorMessage(`Error reading terminal: ${message}`);
-        }
+    let terminalOutput: string;
+    try {
+      terminalOutput = await this.terminalService.readTerminalOutput(activeTerminal);
+    } catch (error) {
+      vscode.window.showErrorMessage('Failed to read terminal output');
+      this.logger.error('Terminal read failed', error);
+      return;
     }
+
+    if (!terminalOutput || terminalOutput.trim().length === 0) {
+      vscode.window.showWarningMessage('Terminal is empty');
+      this.logger.warn('No terminal content available');
+      return;
+    }
+
+    this.logger.info('Terminal output retrieved, parsing errors...');
+
+    const parsedError = this.errorParserService.parseError(terminalOutput);
+
+    if (!parsedError) {
+      vscode.window.showInformationMessage('No error detected in terminal output');
+      this.logger.info('No error pattern matched');
+      return;
+    }
+
+    this.logger.info(`Error detected: ${parsedError.type} in ${parsedError.language}`);
+
+    const errorSummary = this.buildErrorSummary(parsedError);
+    vscode.window.showInformationMessage(errorSummary);
+  }
+
+  private buildErrorSummary(parsedError: any): string {
+    const parts: string[] = [
+      `Error: ${parsedError.type}`,
+      `Message: ${parsedError.message}`,
+      `Language: ${parsedError.language}`,
+    ];
+
+    if (parsedError.filePath) {
+      parts.push(`File: ${parsedError.filePath}`);
+    }
+
+    if (parsedError.lineNumber) {
+      parts.push(`Line: ${parsedError.lineNumber}`);
+    }
+
+    return parts.join(' | ');
+  }
 }

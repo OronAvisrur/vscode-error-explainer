@@ -288,7 +288,7 @@ TypeError: unsupported operand type(s) for +: 'int' and 'str'`;
     });
 
     it('should limit stack trace to 20 lines', () => {
-      const lines = ['Error: Test error'];
+      const lines = ['TypeError: Test error'];
       for (let i = 0; i < 30; i++) {
         lines.push(`    at function${i} (file.js:${i}:1)`);
       }

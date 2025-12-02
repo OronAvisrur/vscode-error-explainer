@@ -1,31 +1,32 @@
 import * as vscode from 'vscode';
-import { StatusBarButton } from './ui/statusBarButton';
 import { ExplainErrorCommand } from './commands/explainErrorCommand';
-
-let statusBarButton: StatusBarButton | undefined;
+import { TerminalService } from './services/terminalService';
+import { ErrorParserService } from './services/errorParserService';
+import { StatusBarButton } from './ui/statusBarButton';
+import { Logger } from './utils/logger';
 
 export function activate(context: vscode.ExtensionContext) {
-    console.log('Error Explainer extension is now active');
+  const logger = Logger.getInstance();
+  logger.info('Error Explainer extension activated');
 
-    const explainErrorCommand = new ExplainErrorCommand();
-    
-    const disposable = vscode.commands.registerCommand(
-        'errorExplainer.explainError',
-        () => explainErrorCommand.execute()
-    );
+  const terminalService = new TerminalService();
+  const errorParserService = new ErrorParserService();
+  const explainErrorCommand = new ExplainErrorCommand(
+    terminalService,
+    errorParserService,
+    logger
+  );
 
-    const config = vscode.workspace.getConfiguration('errorExplainer');
-    const showInStatusBar = config.get<boolean>('showInStatusBar', true);
+  const commandDisposable = vscode.commands.registerCommand(
+    'error-explainer.explainError',
+    () => explainErrorCommand.execute()
+  );
 
-    if (showInStatusBar) {
-        statusBarButton = new StatusBarButton(context);
-    }
+  const statusBarButton = new StatusBarButton(context);
 
-    context.subscriptions.push(disposable);
+  context.subscriptions.push(commandDisposable, statusBarButton);
+
+  logger.info('Error Explainer extension ready');
 }
 
-export function deactivate() {
-    if (statusBarButton) {
-        statusBarButton.dispose();
-    }
-}
+export function deactivate() {}

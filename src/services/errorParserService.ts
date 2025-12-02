@@ -27,13 +27,13 @@ export class ErrorParserService {
 
   private initializePatterns(): ErrorPattern[] {
     return [
-      this.createJavaScriptPattern(),
       this.createTypeScriptPattern(),
-      this.createPythonPattern(),
-      this.createJavaPattern(),
       this.createCSharpPattern(),
       this.createGoPattern(),
       this.createRustPattern(),
+      this.createJavaPattern(),
+      this.createPythonPattern(),
+      this.createJavaScriptPattern(),
     ];
   }
 
@@ -42,6 +42,10 @@ export class ErrorParserService {
       language: 'JavaScript',
       regex: /^(\w+Error): (.+)$/m,
       extractor: (match, fullText) => {
+        if (fullText.includes('Traceback') || fullText.includes('File "')) {
+          return null;
+        }
+
         const type = match[1];
         const message = match[2];
         const stackTrace = this.extractStackTrace(fullText, match.index || 0);
@@ -85,6 +89,10 @@ export class ErrorParserService {
       language: 'Python',
       regex: /^(\w+Error): (.+)$/m,
       extractor: (match, fullText) => {
+        if (!fullText.includes('Traceback') && !fullText.includes('File "')) {
+          return null;
+        }
+
         const type = match[1];
         const message = match[2];
         const stackTrace = this.extractStackTrace(fullText, match.index || 0);
@@ -107,7 +115,7 @@ export class ErrorParserService {
   private createJavaPattern(): ErrorPattern {
     return {
       language: 'Java',
-      regex: /^([\w.]+Exception): (.+)$/m,
+      regex: /([\w.]+Exception): (.+)$/m,
       extractor: (match, fullText) => {
         const type = match[1];
         const message = match[2];
